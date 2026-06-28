@@ -44,6 +44,10 @@ public class SettlementService {
                 .orElseThrow(() -> new IllegalArgumentException(
                         "Unknown receiver VPA: " + instruction.getReceiverVpa()));
 
+        if (sender.getVpa().equals(receiver.getVpa())) {
+            throw new IllegalArgumentException("Sender and receiver cannot be the same account");
+        }
+
         BigDecimal amount = instruction.getAmount();
         if (amount.signum() <= 0) {
             throw new IllegalArgumentException("Amount must be positive");

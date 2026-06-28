@@ -97,21 +97,22 @@
         <div>
             <span class="step-num">1</span><strong>Compose payment</strong> (simulates sender phone)
             <br>
-            <select id="senderVpa">
+            <select id="senderVpa" onchange="updateReceiverOptions()">
                 <option>alice@demo</option>
                 <option>bob@demo</option>
                 <option>carol@demo</option>
+                <option>dave@demo</option>
             </select>
             &rarr;
             <select id="receiverVpa">
                 <option>bob@demo</option>
                 <option>carol@demo</option>
-                <option>alice@demo</option>
                 <option>dave@demo</option>
             </select>
-            &#8377;<input type="number" id="amount" value="500" style="width: 100px">
-            PIN <input type="text" id="pin" value="1234" style="width: 80px" maxlength="4">
+            &#8377;<input type="number" id="amount" value="500" min="1" style="width: 100px">
+            PIN <input type="text" id="pin" value="1234" style="width: 80px" maxlength="6" placeholder="PIN">
             <button onclick="sendPacket()">Inject into Mesh</button>
+            <span id="send-error" style="color:#f85149; font-size:13px; margin-left:8px;"></span>
         </div>
 
         <div style="margin-top: 16px">
@@ -200,6 +201,18 @@
 <script>
 let lastPacket = null;
 
+const ALL_VPAS = ['alice@demo', 'bob@demo', 'carol@demo', 'dave@demo'];
+
+function updateReceiverOptions() {
+    const sender = document.getElementById('senderVpa').value;
+    const receiverEl = document.getElementById('receiverVpa');
+    const current = receiverEl.value;
+    receiverEl.innerHTML = ALL_VPAS
+        .filter(v => v !== sender)
+        .map(v => `<option${v === current && v !== sender ? ' selected' : ''}>${v}</option>`)
+        .join('');
+}
+
 function appendLog(msg) {
     const el = document.getElementById('log');
     el.textContent = '[' + new Date().toLocaleTimeString() + '] ' + msg + '\n' + el.textContent;
@@ -253,11 +266,31 @@ async function refresh() {
 }
 
 async function sendPacket() {
+    const sender = document.getElementById('senderVpa').value;
+    const receiver = document.getElementById('receiverVpa').value;
+    const amount = parseFloat(document.getElementById('amount').value);
+    const pin = document.getElementById('pin').value.trim();
+    const errEl = document.getElementById('send-error');
+
+    if (sender === receiver) {
+        errEl.textContent = 'Sender and receiver cannot be the same.';
+        return;
+    }
+    if (!amount || amount <= 0) {
+        errEl.textContent = 'Amount must be greater than 0.';
+        return;
+    }
+    if (!pin) {
+        errEl.textContent = 'PIN is required.';
+        return;
+    }
+    errEl.textContent = '';
+
     const body = {
-        senderVpa: document.getElementById('senderVpa').value,
-        receiverVpa: document.getElementById('receiverVpa').value,
-        amount: parseFloat(document.getElementById('amount').value),
-        pin: document.getElementById('pin').value,
+        senderVpa: sender,
+        receiverVpa: receiver,
+        amount: amount,
+        pin: pin,
         ttl: 5,
         startDevice: 'phone-alice'
     };
@@ -344,6 +377,7 @@ async function resetMesh() {
     refresh();
 }
 
+updateReceiverOptions();
 refresh();
 setInterval(refresh, 3000);
 </script>
