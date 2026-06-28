@@ -57,6 +57,14 @@
             <artifactId>jackson-databind</artifactId>
         </dependency>
 
+        <!-- DevTools: auto-restart on Java changes, live reload for templates -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-devtools</artifactId>
+            <scope>runtime</scope>
+            <optional>true</optional>
+        </dependency>
+
         <!-- Test scope -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
