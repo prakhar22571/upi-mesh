@@ -2,7 +2,7 @@
 <html xmlns:th="http://www.thymeleaf.org" lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>UPI Offline Mesh — Demo</title>
+    <title>UPI Offline Mesh - Demo</title>
     <style>
         * { box-sizing: border-box; }
         body {
@@ -14,7 +14,6 @@
         .container { max-width: 1200px; margin: 0 auto; }
         .grid { display: grid; gap: 16px; }
         .grid-2 { grid-template-columns: 1fr 1fr; }
-        .grid-3 { grid-template-columns: repeat(3, 1fr); }
         .card {
             background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px;
         }
@@ -41,10 +40,14 @@
             margin: 4px;
         }
         button:hover { background: #2ea043; }
+        button:disabled { opacity: 0.4; cursor: not-allowed; }
+        button:disabled:hover { background: #238636; }
         button.danger { background: #da3633; }
         button.danger:hover { background: #f85149; }
+        button.danger:disabled:hover { background: #da3633; }
         button.secondary { background: #1f6feb; }
         button.secondary:hover { background: #388bfd; }
+        button.secondary:disabled:hover { background: #1f6feb; }
         input, select {
             background: #0d1117; color: #e6edf3; border: 1px solid #30363d;
             border-radius: 4px; padding: 6px 10px; font-size: 14px; margin: 4px;
@@ -71,18 +74,25 @@
         }
         .balance { font-family: 'Consolas', monospace; color: #56d364; font-weight: 600; }
         .small { font-size: 12px; color: #8b949e; }
+        .stats-row {
+            display: flex; gap: 32px; flex-wrap: wrap;
+            font-family: 'Consolas', monospace; font-size: 16px; padding: 8px 0;
+        }
+        .stat-item { display: flex; flex-direction: column; gap: 2px; }
+        .stat-label { font-size: 11px; color: #8b949e; text-transform: uppercase; letter-spacing: 0.5px; }
+        .stat-value { font-size: 24px; font-weight: 700; }
     </style>
 </head>
 <body>
 <div class="container">
-    <h1>📡 UPI Offline Mesh — Live Demo</h1>
+    <h1>UPI Offline Mesh - Live Demo</h1>
     <p class="small">
         Send money in a basement with zero internet. Encrypted packets gossip from phone to phone
-        until one with 4G reaches the backend.
+        until one with 4G reaches the backend. By Prakhar Rai.
     </p>
 
     <div class="controls">
-        <h3 style="margin-top:0">🎬 Demo Flow</h3>
+        <h3 style="margin-top:0">Demo Flow</h3>
 
         <div>
             <span class="step-num">1</span><strong>Compose payment</strong> (simulates sender phone)
@@ -92,42 +102,76 @@
                 <option>bob@demo</option>
                 <option>carol@demo</option>
             </select>
-            →
+            &rarr;
             <select id="receiverVpa">
                 <option>bob@demo</option>
                 <option>carol@demo</option>
                 <option>alice@demo</option>
                 <option>dave@demo</option>
             </select>
-            ₹<input type="number" id="amount" value="500" style="width: 100px">
+            &#8377;<input type="number" id="amount" value="500" style="width: 100px">
             PIN <input type="text" id="pin" value="1234" style="width: 80px" maxlength="4">
-            <button onclick="sendPacket()">📤 Inject into Mesh</button>
+            <button onclick="sendPacket()">Inject into Mesh</button>
         </div>
 
         <div style="margin-top: 16px">
-            <span class="step-num">2</span><strong>Gossip</strong> — packets hop device-to-device
-            <button class="secondary" onclick="gossip()">🔄 Run Gossip Round</button>
+            <span class="step-num">2</span><strong>Gossip</strong> - packets hop device-to-device
+            <button class="secondary" onclick="gossip()">Run Gossip Round</button>
         </div>
 
         <div style="margin-top: 16px">
-            <span class="step-num">3</span><strong>Bridge node walks outside, hits 4G</strong>
-            <button class="secondary" onclick="flushBridges()">📡 Bridges Upload to Backend</button>
-            <span class="small">(parallel — exercises idempotency)</span>
+            <span class="step-num">3</span><strong>Bridge nodes walk outside, hit 4G</strong>
+            <button class="secondary" onclick="flushBridges()">Bridges Upload to Backend</button>
+            <span class="small">(parallel - 3 bridges, exercises concurrent idempotency)</span>
         </div>
 
         <div style="margin-top: 16px">
-            <button class="danger" onclick="resetMesh()">🗑 Reset Mesh + Cache</button>
+            <span class="step-num">4</span><strong>Security demos</strong>
+            <button class="secondary" id="btn-replay" onclick="replayLastPacket()" disabled>
+                Replay Last Packet
+            </button>
+            <span class="small">(expects DUPLICATE_DROPPED)</span>
+            <button class="danger" id="btn-tamper" onclick="tamperAndSubmit()" disabled>
+                Tamper + Submit
+            </button>
+            <span class="small">(expects INVALID)</span>
+        </div>
+
+        <div style="margin-top: 16px">
+            <button class="danger" onclick="resetMesh()">Reset Mesh + Cache</button>
+        </div>
+    </div>
+
+    <div class="card" style="margin-bottom: 16px">
+        <h2>Outcome Stats</h2>
+        <div class="stats-row">
+            <div class="stat-item">
+                <span class="stat-label">Settled</span>
+                <span class="stat-value status-SETTLED" id="stat-settled">0</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Rejected (NSF)</span>
+                <span class="stat-value status-REJECTED" id="stat-rejected">0</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Duplicate Dropped</span>
+                <span class="stat-value status-DUPLICATE_DROPPED" id="stat-duplicate">0</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Invalid</span>
+                <span class="stat-value status-INVALID" id="stat-invalid">0</span>
+            </div>
         </div>
     </div>
 
     <div class="grid grid-2">
         <div class="card">
-            <h2>📱 Mesh Devices</h2>
+            <h2>Mesh Devices</h2>
             <div id="devices"></div>
         </div>
 
         <div class="card">
-            <h2>🏦 Account Balances</h2>
+            <h2>Account Balances</h2>
             <table id="accounts-table">
                 <thead><tr><th>VPA</th><th>Holder</th><th>Balance</th></tr></thead>
                 <tbody></tbody>
@@ -137,7 +181,7 @@
     </div>
 
     <div class="card" style="margin-top: 16px">
-        <h2>📜 Transaction Ledger</h2>
+        <h2>Transaction Ledger</h2>
         <table id="tx-table">
             <thead><tr>
                 <th>ID</th><th>From</th><th>To</th><th>Amount</th>
@@ -148,15 +192,25 @@
     </div>
 
     <div class="card" style="margin-top: 16px">
-        <h2>🪵 Activity Log</h2>
+        <h2>Activity Log</h2>
         <div id="log"></div>
     </div>
 </div>
 
 <script>
-function log(msg) {
+let lastPacket = null;
+
+function appendLog(msg) {
     const el = document.getElementById('log');
     el.textContent = '[' + new Date().toLocaleTimeString() + '] ' + msg + '\n' + el.textContent;
+}
+
+async function refreshStats() {
+    const s = await fetch('/api/stats').then(r => r.json());
+    document.getElementById('stat-settled').textContent   = s.settled;
+    document.getElementById('stat-rejected').textContent  = s.rejected;
+    document.getElementById('stat-duplicate').textContent = s.duplicateDropped;
+    document.getElementById('stat-invalid').textContent   = s.invalid;
 }
 
 async function refresh() {
@@ -167,7 +221,7 @@ async function refresh() {
         <div class="device ${d.hasInternet ? 'bridge' : 'offline'}">
             <strong>${d.deviceId}</strong>
             <span class="badge ${d.hasInternet ? 'badge-online' : 'badge-offline'}">
-                ${d.hasInternet ? '🌐 4G' : '🚫 OFFLINE'}
+                ${d.hasInternet ? '4G' : 'OFFLINE'}
             </span>
             <span class="small">holding ${d.packetCount} packet(s)</span>
             <div>${d.packetIds.map(id => `<span class="packet-id">${id}</span>`).join('')}</div>
@@ -180,7 +234,7 @@ async function refresh() {
     const accs = await fetch('/api/accounts').then(r => r.json());
     document.querySelector('#accounts-table tbody').innerHTML = accs.map(a => `
         <tr><td>${a.vpa}</td><td>${a.holderName}</td>
-            <td class="balance">₹${parseFloat(a.balance).toFixed(2)}</td></tr>
+            <td class="balance">&#8377;${parseFloat(a.balance).toFixed(2)}</td></tr>
     `).join('');
 
     // Transactions
@@ -188,12 +242,14 @@ async function refresh() {
     document.querySelector('#tx-table tbody').innerHTML = txs.map(t => `
         <tr>
             <td>${t.id}</td><td>${t.senderVpa}</td><td>${t.receiverVpa}</td>
-            <td class="balance">₹${parseFloat(t.amount).toFixed(2)}</td>
+            <td class="balance">&#8377;${parseFloat(t.amount).toFixed(2)}</td>
             <td class="status-${t.status}">${t.status}</td>
             <td>${t.bridgeNodeId}</td><td>${t.hopCount}</td>
             <td class="small">${new Date(t.settledAt).toLocaleTimeString()}</td>
         </tr>
     `).join('');
+
+    await refreshStats();
 }
 
 async function sendPacket() {
@@ -209,30 +265,82 @@ async function sendPacket() {
         method: 'POST', headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(body)
     }).then(r => r.json());
-    log(`📤 Packet ${r.packetId.substring(0,8)} encrypted & injected at ${r.injectedAt} (TTL ${r.ttl})`);
-    log(`   ciphertext (truncated): ${r.ciphertextPreview}`);
+
+    lastPacket = { packetId: r.packetId, ciphertext: r.ciphertext, ttl: r.ttl };
+    document.getElementById('btn-replay').disabled = false;
+    document.getElementById('btn-tamper').disabled = false;
+
+    appendLog(`Packet ${r.packetId.substring(0,8)} encrypted & injected at ${r.injectedAt} (TTL ${r.ttl})`);
+    appendLog(`  ciphertext (truncated): ${r.ciphertextPreview}`);
     refresh();
 }
 
 async function gossip() {
     const r = await fetch('/api/mesh/gossip', {method: 'POST'}).then(r => r.json());
-    log(`🔄 Gossip: ${r.transfers} transfer(s) — ${JSON.stringify(r.deviceCounts)}`);
+    appendLog(`Gossip: ${r.transfers} transfer(s) - ${JSON.stringify(r.deviceCounts)}`);
     refresh();
 }
 
 async function flushBridges() {
     const r = await fetch('/api/mesh/flush', {method: 'POST'}).then(r => r.json());
-    log(`📡 ${r.uploadsAttempted} bridge upload(s):`);
+    appendLog(`${r.uploadsAttempted} bridge upload(s):`);
     r.results.forEach(res => {
-        log(`   ${res.bridgeNode} packet ${res.packetId} → ${res.outcome}` +
+        appendLog(`  ${res.bridgeNode} packet ${res.packetId} -> ${res.outcome}` +
             (res.reason ? ` (${res.reason})` : ''));
     });
     refresh();
 }
 
+async function replayLastPacket() {
+    if (!lastPacket) return;
+    const r = await fetch('/api/bridge/ingest', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Bridge-Node-Id': 'replay-demo',
+            'X-Hop-Count': '0'
+        },
+        body: JSON.stringify({
+            packetId: lastPacket.packetId,
+            ttl: lastPacket.ttl,
+            createdAt: Date.now(),
+            ciphertext: lastPacket.ciphertext
+        })
+    }).then(r => r.json());
+    appendLog(`Replay attempt -> ${r.outcome}` + (r.reason ? ` (${r.reason})` : ''));
+    refresh();
+}
+
+async function tamperAndSubmit() {
+    if (!lastPacket) return;
+    // Flip one character in the middle of the ciphertext - GCM auth tag will reject it
+    const ct = lastPacket.ciphertext.split('');
+    const mid = Math.floor(ct.length / 2);
+    ct[mid] = ct[mid] === 'A' ? 'B' : 'A';
+    const r = await fetch('/api/bridge/ingest', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Bridge-Node-Id': 'tamper-demo',
+            'X-Hop-Count': '0'
+        },
+        body: JSON.stringify({
+            packetId: lastPacket.packetId + '-tampered',
+            ttl: lastPacket.ttl,
+            createdAt: Date.now(),
+            ciphertext: ct.join('')
+        })
+    }).then(r => r.json());
+    appendLog(`Tamper attempt -> ${r.outcome}` + (r.reason ? ` (${r.reason})` : ''));
+    refresh();
+}
+
 async function resetMesh() {
     await fetch('/api/mesh/reset', {method: 'POST'});
-    log('🗑 mesh + idempotency cache cleared');
+    lastPacket = null;
+    document.getElementById('btn-replay').disabled = true;
+    document.getElementById('btn-tamper').disabled = true;
+    appendLog('Mesh + idempotency cache cleared');
     refresh();
 }
 

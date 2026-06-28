@@ -122,17 +122,15 @@ The backend pipeline runs:
 
 Watch the **Account Balances** table - money has moved. Watch the **Transaction Ledger** - a new row appears.
 
-### Step 4 - Demonstrate idempotency (the killer feature)
+### Step 4 - Demonstrate idempotency and security
 
-Reset the mesh. Inject a single packet. Run gossip 2 times. Now **all 5 devices hold the same packet, including multiple bridges in a more complex setup**.
+The mesh has **3 bridge nodes** (`phone-bridge`, `phone-bridge-2`, `phone-bridge-3`). After gossip, all three hold the same packet. When you click "Bridges Upload to Backend", all three POST concurrently - you'll see exactly 1 SETTLED and 2 DUPLICATE_DROPPED in the activity log and outcome stats.
 
-To really see idempotency in action, modify `MeshSimulatorService.java` to seed multiple bridge devices, or just:
+The dashboard also has two security demo buttons (enabled after injecting a packet):
+- **Replay Last Packet** - re-submits the already-settled packet directly to `/api/bridge/ingest`. Expected: DUPLICATE_DROPPED.
+- **Tamper + Submit** - flips one byte in the ciphertext and submits it. Expected: INVALID (the AES-GCM auth tag catches it).
 
-1. Click "Inject" once.
-2. Click "Gossip" twice.
-3. Click "Flush Bridges" - only `phone-bridge` is a bridge in the default seed, so just one upload happens.
-
-To exercise the *concurrent duplicate* case properly, run the test:
+To also exercise the *concurrent duplicate* case in code, run the test:
 ```cmd
 mvnw.cmd test -Dtest=IdempotencyConcurrencyTest#singlePacketDeliveredByThreeBridgesSettlesExactlyOnce
 ```
@@ -274,7 +272,7 @@ upi-offline-mesh/
         ├── service/                         -- Business logic
         │   ├── DemoService.java             Seeds accounts, simulates a sender phone
         │   ├── VirtualDevice.java           One simulated phone in the mesh
-        │   ├── MeshSimulatorService.java    Gossip protocol across virtual devices
+        │   ├── MeshSimulatorService.java    Gossip protocol across 7 virtual devices (4 offline, 3 bridges)
         │   ├── IdempotencyService.java      ConcurrentHashMap = JVM-local Redis SETNX
         │   ├── SettlementService.java       @Transactional debit + credit + ledger insert
         │   └── BridgeIngestionService.java  THE pipeline: hash -> claim -> decrypt -> freshness -> settle
@@ -345,11 +343,14 @@ Run all tests:
 mvnw.cmd test
 ```
 
-The three included tests:
+The six included tests:
 
 - **`encryptDecryptRoundTrip`** - sanity-check that hybrid encryption is symmetric.
 - **`tamperedCiphertextIsRejected`** - flip a byte in the ciphertext, verify that `BridgeIngestionService` returns `INVALID` instead of crashing or settling.
 - **`singlePacketDeliveredByThreeBridgesSettlesExactlyOnce`** - the headline test. Three threads, one packet, simultaneous delivery. Asserts exactly one `SETTLED`, two `DUPLICATE_DROPPED`, and that the sender's balance changed by exactly the amount once.
+- **`insufficientFundsResultsInRejected`** - send more than the account balance; verify the outcome is `REJECTED` and a ledger row is still written.
+- **`expiredPacketIsInvalid`** - craft a packet with `signedAt` 25 hours in the past; verify the freshness check returns `INVALID` with reason `stale_packet`.
+- **`replayOfSettledPacketIsDuplicate`** - settle a packet once, then submit the same packet again from a different bridge; verify the second call is `DUPLICATE_DROPPED`.
 
 ---
 

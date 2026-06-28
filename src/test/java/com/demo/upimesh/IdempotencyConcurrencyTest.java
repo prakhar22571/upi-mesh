@@ -14,6 +14,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
 import java.math.BigDecimal;
+import java.util.UUID;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -36,6 +37,7 @@ class IdempotencyConcurrencyTest {
     @BeforeEach
     void clear() {
         idempotency.clear();
+        bridge.resetStats();
     }
 
     @Test
@@ -92,6 +94,48 @@ class IdempotencyConcurrencyTest {
 
         BridgeIngestionService.IngestResult r = bridge.ingest(packet, "bridge-x", 1);
         assertEquals("INVALID", r.outcome());
+    }
+
+    @Test
+    void insufficientFundsResultsInRejected() throws Exception {
+        // dave starts with ₹500; sending ₹1000 should record REJECTED, not crash
+        MeshPacket packet = demoService.createPacket(
+                "dave@demo", "alice@demo", new BigDecimal("1000.00"), "1234", 5);
+        BridgeIngestionService.IngestResult r = bridge.ingest(packet, "bridge-test", 1);
+        assertEquals("REJECTED", r.outcome());
+        assertNotNull(r.transactionId(), "a REJECTED settlement should still record a ledger row");
+    }
+
+    @Test
+    void expiredPacketIsInvalid() throws Exception {
+        // signedAt 25 hours ago - should fail the freshness check
+        long oldSignedAt = System.currentTimeMillis() - (25L * 3600 * 1000);
+        PaymentInstruction stale = new PaymentInstruction(
+                "alice@demo", "bob@demo", new BigDecimal("10.00"),
+                "pinhash", UUID.randomUUID().toString(), oldSignedAt);
+
+        String ciphertext = crypto.encrypt(stale, serverKey.getPublicKey());
+        MeshPacket packet = new MeshPacket();
+        packet.setPacketId(UUID.randomUUID().toString());
+        packet.setTtl(5);
+        packet.setCreatedAt(oldSignedAt);
+        packet.setCiphertext(ciphertext);
+
+        BridgeIngestionService.IngestResult r = bridge.ingest(packet, "bridge-test", 1);
+        assertEquals("INVALID", r.outcome());
+        assertEquals("stale_packet", r.reason());
+    }
+
+    @Test
+    void replayOfSettledPacketIsDuplicate() throws Exception {
+        MeshPacket packet = demoService.createPacket(
+                "alice@demo", "bob@demo", new BigDecimal("10.00"), "1234", 5);
+
+        BridgeIngestionService.IngestResult first = bridge.ingest(packet, "bridge-1", 2);
+        assertEquals("SETTLED", first.outcome());
+
+        BridgeIngestionService.IngestResult second = bridge.ingest(packet, "bridge-2", 3);
+        assertEquals("DUPLICATE_DROPPED", second.outcome());
     }
 
     @Test

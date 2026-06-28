@@ -59,6 +59,7 @@ public class ApiController {
 
         return ResponseEntity.ok(Map.of(
                 "packetId", packet.getPacketId(),
+                "ciphertext", packet.getCiphertext(),
                 "ciphertextPreview", packet.getCiphertext().substring(0, 64) + "...",
                 "ttl", packet.getTtl(),
                 "injectedAt", startDevice
@@ -142,7 +143,13 @@ public class ApiController {
     public Map<String, Object> meshReset() {
         mesh.resetMesh();
         idempotency.clear();
+        bridge.resetStats();
         return Map.of("status", "mesh and idempotency cache cleared");
+    }
+
+    @GetMapping("/stats")
+    public Map<String, Integer> getStats() {
+        return bridge.getStats();
     }
 
     // -------------------------------------------------------------- bridge
